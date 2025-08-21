@@ -14,6 +14,27 @@ class AtelieDB:
     def create_table(self):
         conn = self.get_db_connection()
         cursor = conn.cursor()
+
+    # Tabela de itens produzidos
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS itens_produzidos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                data TEXT NOT NULL,
+                item TEXT NOT NULL,
+                quantidade INTEGER NOT NULL
+            )
+        ''')
+
+        # Tabela de horas trabalhadas
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS horas_trabalhadas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                data TEXT NOT NULL,
+                horas REAL NOT NULL
+        )
+    ''')
+        
+        # Tabela de produtos   
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS produtos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
