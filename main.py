@@ -83,7 +83,7 @@ class AtelieApp(ctk.CTk):
 
         # --- Itens Produzidos ---
         ctk.CTkLabel(frame_sessao, text="Itens Produzidos:", font=self.default_font).grid(row=4, column=0, padx=(10,5), pady=5, sticky="e")
-        self.option_menu_produtos = ctk.CTkOptionMenu(frame_sessao, values=["Carregando..."], font=self.default_font)
+        self.option_menu_produtos = ctk.CTkOptionMenu(frame_sessao, values=["Carregando..."], font=self.default_font, width=250)
         self.option_menu_produtos.grid(row=4, column=1, columnspan=2, padx=(0,5), pady=5, sticky="w")
         
         ctk.CTkLabel(frame_sessao, text="Qtd:", font=self.default_font).grid(row=4, column=3, padx=(0,5), pady=5, sticky="e")
