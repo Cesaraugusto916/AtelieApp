@@ -51,7 +51,7 @@ class AtelieApp(ctk.CTk):
         # --- Frame para os inputs da sessão ---
         frame_sessao = ctk.CTkFrame(self.tab_registros)
         frame_sessao.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
-        frame_sessao.grid_columnconfigure(1, weight=1)
+        # frame_sessao.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(frame_sessao, text="Registrar Nova Sessão de Trabalho", font=self.title_font).grid(row=0, column=0, columnspan=6, pady=10, padx=10)
 
