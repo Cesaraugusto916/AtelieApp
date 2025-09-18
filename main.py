@@ -17,6 +17,7 @@ class AtelieApp(ctk.CTk):
         # --- Configuração da Janela Principal ---
         self.title("AteliêApp da Mamãe")
         self.geometry("800x600")
+        self.attributes('-zoomed', True)
         self.minsize(600, 500) # Define um tamanho mínimo para a janela
 
         # --- Caminhos para os arquivos de dados ---
