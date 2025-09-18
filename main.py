@@ -57,7 +57,7 @@ class AtelieApp(ctk.CTk):
 
         # --- Inputs de Data ---
         hoje = datetime.now()
-        ctk.CTkLabel(frame_sessao, text="Data:", font=self.default_font).grid(row=1, column=0, padx=(10,5), pady=5, sticky="w")
+        ctk.CTkLabel(frame_sessao, text="Data:", font=self.default_font).grid(row=1, column=0, padx=(10,5), pady=5, sticky="e")
         self.entry_dia = ctk.CTkEntry(frame_sessao, width=50, font=self.default_font)
         self.entry_dia.insert(0, hoje.strftime('%d'))
         self.entry_dia.grid(row=1, column=1, pady=5, sticky="w")
@@ -69,22 +69,22 @@ class AtelieApp(ctk.CTk):
         self.entry_ano.grid(row=1, column=3, pady=5, sticky="w")
 
         # --- Inputs de Horário ---
-        ctk.CTkLabel(frame_sessao, text="Início:", font=self.default_font).grid(row=2, column=0, padx=(10,5), pady=5, sticky="w")
+        ctk.CTkLabel(frame_sessao, text="Início:", font=self.default_font).grid(row=2, column=0, padx=(10,5), pady=5, sticky="e")
         self.entry_inicio_h = ctk.CTkEntry(frame_sessao, width=50, placeholder_text="HH", font=self.default_font)
         self.entry_inicio_h.grid(row=2, column=1, pady=5, sticky="w")
         self.entry_inicio_m = ctk.CTkEntry(frame_sessao, width=50, placeholder_text="MM", font=self.default_font)
         self.entry_inicio_m.grid(row=2, column=2, padx=5, pady=5, sticky="w")
 
-        ctk.CTkLabel(frame_sessao, text="Fim:", font=self.default_font).grid(row=3, column=0, padx=(10,5), pady=5, sticky="w")
+        ctk.CTkLabel(frame_sessao, text="Fim:", font=self.default_font).grid(row=3, column=0, padx=(10,5), pady=5, sticky="e")
         self.entry_fim_h = ctk.CTkEntry(frame_sessao, width=50, placeholder_text="HH", font=self.default_font)
         self.entry_fim_h.grid(row=3, column=1, pady=5, sticky="w")
         self.entry_fim_m = ctk.CTkEntry(frame_sessao, width=50, placeholder_text="MM", font=self.default_font)
         self.entry_fim_m.grid(row=3, column=2, padx=5, pady=5, sticky="w")
 
         # --- Itens Produzidos ---
-        ctk.CTkLabel(frame_sessao, text="Itens Produzidos:", font=self.default_font).grid(row=4, column=0, padx=(10,5), pady=5, sticky="w")
+        ctk.CTkLabel(frame_sessao, text="Itens Produzidos:", font=self.default_font).grid(row=4, column=0, padx=(10,5), pady=5, sticky="e")
         self.option_menu_produtos = ctk.CTkOptionMenu(frame_sessao, values=["Carregando..."], font=self.default_font)
-        self.option_menu_produtos.grid(row=4, column=1, columnspan=2, padx=5, pady=5, sticky="we")
+        self.option_menu_produtos.grid(row=4, column=1, columnspan=2, padx=(0,5), pady=5, sticky="w")
         
         ctk.CTkLabel(frame_sessao, text="Qtd:", font=self.default_font).grid(row=4, column=3, padx=(0,5), pady=5, sticky="e")
         self.entry_item_qtd = ctk.CTkEntry(frame_sessao, width=50, font=self.default_font)
@@ -127,22 +127,22 @@ class AtelieApp(ctk.CTk):
         frame_cadastro = ctk.CTkFrame(self.tab_produtos)
         frame_cadastro.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
 
-        ctk.CTkLabel(frame_cadastro, text="Cadastrar Novo Produto", font=self.title_font).grid(row=0, column=0, columnspan=4, pady=10)
+        ctk.CTkLabel(frame_cadastro, text="Cadastrar Novo Produto", font=self.title_font).grid(row=0, column=0, columnspan=2, pady=10)
         
-        ctk.CTkLabel(frame_cadastro, text="Nome:", font=self.default_font).grid(row=1, column=0, padx=5, sticky="w")
+        ctk.CTkLabel(frame_cadastro, text="Nome:", font=self.default_font).grid(row=1, column=0, padx=(10,5), pady=5, sticky="e")
         self.entry_nome = ctk.CTkEntry(frame_cadastro, width=200, font=self.default_font)
-        self.entry_nome.grid(row=1, column=1, padx=5, pady=10)
+        self.entry_nome.grid(row=1, column=1, padx=(0,10), pady=10, sticky="w")
 
-        ctk.CTkLabel(frame_cadastro, text="Tamanho:", font=self.default_font).grid(row=1, column=2, padx=5, sticky="w")
+        ctk.CTkLabel(frame_cadastro, text="Tamanho:", font=self.default_font).grid(row=2, column=0, padx=(10,5), pady=5, sticky="e")
         self.entry_tamanho = ctk.CTkEntry(frame_cadastro, font=self.default_font)
-        self.entry_tamanho.grid(row=1, column=3, padx=5, pady=10)
+        self.entry_tamanho.grid(row=2, column=1, padx=(0,10), pady=10, sticky="w")
         
-        ctk.CTkLabel(frame_cadastro, text="Meta (min):", font=self.default_font).grid(row=2, column=0, padx=5, sticky="w")
+        ctk.CTkLabel(frame_cadastro, text="Meta (min):", font=self.default_font).grid(row=3, column=0, padx=(10,5), pady=5, sticky="e")
         self.entry_meta = ctk.CTkEntry(frame_cadastro, width=100, font=self.default_font)
-        self.entry_meta.grid(row=2, column=1, padx=5, pady=10)
+        self.entry_meta.grid(row=3, column=1, padx=(0,10), pady=10, sticky="w")
 
         btn_salvar_produto = ctk.CTkButton(frame_cadastro, text="Salvar Novo Produto", font=self.default_font, command=self._salvar_novo_produto)
-        btn_salvar_produto.grid(row=3, column=0, columnspan=4, pady=10)
+        btn_salvar_produto.grid(row=4, column=0, columnspan=2, pady=10)
 
         # Frame para a tabela de produtos
         frame_tabela_produtos = ctk.CTkFrame(self.tab_produtos)
