@@ -1,3 +1,2 @@
-data,hora_inicio,hora_fim,id_produto,quantidade
-2025-09-16,13:00,18:00,prod_003,2
-2025-09-16,13:00,18:00,prod_004,1
+id_registro,data,inicio,fim,itens_produzidos
+reg_001,2025-09-18,09:00,18:00,"""Oi (asd) (Qtd: 29)"
