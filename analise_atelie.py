@@ -29,7 +29,7 @@ class AtelieAnalysisApp(ctk.CTk):
         self.attributes('-zoomed', True)
         self.minsize(800, 600)
 
-        # --- Parte 2: Atributos de Estado ---
+        # --- Atributos de Estado ---
         self.visao_atual = "Semanal"
         self.data_referencia = datetime.now().date()
         self.df_registros = pd.DataFrame()
@@ -49,14 +49,30 @@ class AtelieAnalysisApp(ctk.CTk):
         # --- Atualização Inicial ---
         self._atualizar_visao()
 
+    # --- Parte 1: Melhorias Visuais e de Estrutura ---
+    def _estilizar_grafico(self, ax, fig):
+        """Aplica um estilo visual escuro e limpo ao gráfico Matplotlib."""
+        fig.set_facecolor("#2B2B2B")
+        ax.set_facecolor("#2B2B2B")
+        
+        ax.tick_params(colors='white', which='both')
+        ax.xaxis.label.set_color('white')
+        ax.yaxis.label.set_color('white')
+        ax.title.set_color('white')
+
+        for spine in ax.spines.values():
+            spine.set_edgecolor('white')
+        
+        ax.grid(True, which='major', linestyle='--', linewidth=0.5, alpha=0.3)
+
     def criar_aba_dashboard(self):
         """
         Cria os widgets e o layout para a aba "Dashboard de Horas".
         """
         self.tab_dashboard.grid_columnconfigure(0, weight=1)
-        self.tab_dashboard.grid_rowconfigure(2, weight=1) # A linha do gráfico (2) deve expandir
+        self.tab_dashboard.grid_rowconfigure(2, weight=1)
 
-        # --- Parte 1a: Painel de Destaques (KPIs) ---
+        # --- Painel de Destaques (KPIs) ---
         frame_kpis = ctk.CTkFrame(self.tab_dashboard)
         frame_kpis.grid(row=0, column=0, padx=20, pady=(10, 5), sticky="ew")
         frame_kpis.grid_columnconfigure([0, 1, 2], weight=1)
@@ -96,17 +112,14 @@ class AtelieAnalysisApp(ctk.CTk):
         self.segmented_button_visao.set("Semanal")
         self.segmented_button_visao.grid(row=0, column=3, padx=10, pady=10)
 
-        # --- Parte 1b: Área do Gráfico ---
+        # --- Área do Gráfico ---
         self.frame_grafico = ctk.CTkFrame(self.tab_dashboard)
         self.frame_grafico.grid(row=2, column=0, padx=20, pady=(5, 10), sticky="nsew")
         self.frame_grafico.grid_columnconfigure(0, weight=1)
         self.frame_grafico.grid_rowconfigure(0, weight=1)
 
-        self.fig, self.ax = plt.subplots(facecolor="#2B2B2B")
-        self.ax.tick_params(colors='white')
-        self.ax.xaxis.label.set_color('white')
-        self.ax.yaxis.label.set_color('white')
-        self.ax.set_facecolor("#2B2B2B")
+        self.fig, self.ax = plt.subplots()
+        self._estilizar_grafico(self.ax, self.fig)
         plt.tight_layout()
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.frame_grafico)
@@ -123,10 +136,6 @@ class AtelieAnalysisApp(ctk.CTk):
             self.df_registros['data'] = pd.to_datetime(self.df_registros['data'])
             for col in ['pausa_min', 'duracao_total_min']:
                 self.df_registros[col] = pd.to_numeric(self.df_registros[col], errors='coerce').fillna(0)
-            # Converte HH:MM para horas decimais para plotagem
-            for col in ['inicio', 'fim']:
-                self.df_registros[f'{col}_decimal'] = pd.to_datetime(self.df_registros[col], format='%H:%M', errors='coerce').dt.hour + \
-                                                      pd.to_datetime(self.df_registros[col], format='%H:%M', errors='coerce').dt.minute / 60
         except FileNotFoundError:
             messagebox.showerror("Erro Crítico", "O arquivo 'registros.csv' não foi encontrado.")
         except Exception as e:
@@ -159,6 +168,7 @@ class AtelieAnalysisApp(ctk.CTk):
         if self.df_registros.empty:
             self.ax.clear()
             self.ax.text(0.5, 0.5, "Nenhum dado para exibir", ha='center', va='center', color='white', fontsize=16)
+            self._estilizar_grafico(self.ax, self.fig)
             self.canvas.draw()
             return
 
@@ -168,11 +178,12 @@ class AtelieAnalysisApp(ctk.CTk):
             inicio_semana = self.data_referencia - timedelta(days=self.data_referencia.weekday())
             fim_semana = inicio_semana + timedelta(days=6)
             df_filtrado = self.df_registros[(self.df_registros['data'].dt.date >= inicio_semana) & (self.df_registros['data'].dt.date <= fim_semana)]
-            self._plotar_grafico_semanal(df_filtrado)
+            self._plotar_grafico_semanal(df_filtrado, inicio_semana, fim_semana)
             self.label_periodo.configure(text=f"{inicio_semana.strftime('%d/%m/%Y')} - {fim_semana.strftime('%d/%m/%Y')}")
 
         elif self.visao_atual == "Mensal":
-            df_filtrado = self.df_registros[self.df_registros['data'].dt.month == self.data_referencia.month]
+            df_filtrado = self.df_registros[(self.df_registros['data'].dt.year == self.data_referencia.year) & 
+                                          (self.df_registros['data'].dt.month == self.data_referencia.month)]
             self._plotar_grafico_mensal_anual(df_filtrado, "Mensal")
             self.label_periodo.configure(text=f"{self.data_referencia.strftime('%B de %Y').capitalize()}")
 
@@ -194,53 +205,55 @@ class AtelieAnalysisApp(ctk.CTk):
             self.label_media_diaria.configure(text="0h")
             self.label_dias_trabalhados.configure(text="0 dias")
 
-    def _plotar_grafico_semanal(self, df_semana):
+    def _plotar_grafico_semanal(self, df_semana, inicio_semana, fim_semana):
         self.ax.clear()
+        
         if df_semana.empty:
             self.ax.text(0.5, 0.5, "Sem dados para esta semana", ha='center', va='center', color='white')
         else:
-            df_plot = df_semana.dropna(subset=['inicio_decimal', 'fim_decimal'])
-            df_plot['duracao_decimal'] = df_plot['fim_decimal'] - df_plot['inicio_decimal']
+            df_semana['horas_trabalhadas'] = df_semana['duracao_total_min'] / 60
+            dados_por_dia = df_semana.groupby(df_semana['data'].dt.day_name())['horas_trabalhadas'].sum()
             
-            dias_semana = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo']
-            df_plot['dia_semana'] = pd.Categorical(df_plot['data'].dt.day_name(), categories=dias_semana, ordered=True)
+            dias_semana_ordem = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo']
+            dados_por_dia = dados_por_dia.reindex(dias_semana_ordem, fill_value=0)
 
-            for dia in dias_semana:
-                df_dia = df_plot[df_plot['dia_semana'] == dia]
-                if not df_dia.empty:
-                    self.ax.barh(df_dia['dia_semana'], df_dia['duracao_decimal'], left=df_dia['inicio_decimal'], color='#009688', edgecolor='white')
+            barras = self.ax.barh(dados_por_dia.index, dados_por_dia.values, color='#009688')
+            self.ax.bar_label(barras, fmt='%.1fh', padding=3, color='white', fontsize=10)
+            
+            self.ax.set_xlabel("Horas Trabalhadas", color='white')
+            self.ax.set_title(f"Horas por Dia na Semana de {inicio_semana.strftime('%d/%m')} a {fim_semana.strftime('%d/%m')}")
+            self.ax.invert_yaxis()
 
-            self.ax.set_xlim(0, 24)
-            self.ax.set_xticks(range(0, 25, 2))
-            self.ax.set_xlabel("Hora do Dia", color='white')
-            self.ax.set_ylabel("Dia da Semana", color='white')
-            self.ax.invert_yaxis() # Deixa Segunda em cima
-            self.ax.grid(axis='x', linestyle='--', alpha=0.3)
-        
+        self._estilizar_grafico(self.ax, self.fig)
         self.fig.tight_layout()
         self.canvas.draw()
 
     def _plotar_grafico_mensal_anual(self, df_periodo, tipo):
         self.ax.clear()
+        
         if df_periodo.empty:
             self.ax.text(0.5, 0.5, f"Sem dados para este {tipo.lower()}", ha='center', va='center', color='white')
         else:
+            df_periodo['horas_trabalhadas'] = df_periodo['duracao_total_min'] / 60
+            
             if tipo == "Mensal":
-                dados_agregados = df_periodo.groupby(df_periodo['data'].dt.day)['duracao_total_min'].sum() / 60
+                dados_agregados = df_periodo.groupby(df_periodo['data'].dt.day)['horas_trabalhadas'].sum()
+                barras = self.ax.bar(dados_agregados.index, dados_agregados.values, color='#20726A')
                 self.ax.set_xlabel("Dia do Mês", color='white')
-                self.ax.set_ylabel("Total de Horas Trabalhadas", color='white')
+                self.ax.set_title(f"Horas Trabalhadas em: {self.data_referencia.strftime('%B de %Y').capitalize()}")
             else: # Anual
-                dados_agregados = df_periodo.groupby(df_periodo['data'].dt.month)['duracao_total_min'].sum() / 60
+                dados_agregados = df_periodo.groupby(df_periodo['data'].dt.month)['horas_trabalhadas'].sum()
                 dados_agregados = dados_agregados.reindex(range(1, 13), fill_value=0)
+                barras = self.ax.bar(dados_agregados.index, dados_agregados.values, color='#20726A')
                 self.ax.set_xticks(range(1, 13))
-                self.ax.set_xticklabels([calendar.month_abbr[i] for i in range(1, 13)])
+                self.ax.set_xticklabels([calendar.month_abbr[i].capitalize() for i in range(1, 13)], rotation=0)
                 self.ax.set_xlabel("Mês", color='white')
-                self.ax.set_ylabel("Total de Horas Trabalhadas", color='white')
+                self.ax.set_title(f"Horas Trabalhadas em: {self.data_referencia.year}")
 
-            dados_agregados.plot(kind='bar', ax=self.ax, color='#20726A', edgecolor='white')
-            self.ax.grid(axis='y', linestyle='--', alpha=0.3)
-            plt.setp(self.ax.get_xticklabels(), rotation=0, color='white')
+            self.ax.bar_label(barras, fmt='%.1f', padding=3, color='white', fontsize=10)
+            self.ax.set_ylabel("Total de Horas Trabalhadas", color='white')
 
+        self._estilizar_grafico(self.ax, self.fig)
         self.fig.tight_layout()
         self.canvas.draw()
 
