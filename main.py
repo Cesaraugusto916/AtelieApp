@@ -80,6 +80,12 @@ class AtelieApp(ctk.CTk):
         self.entry_fim_h.grid(row=3, column=1, pady=5, sticky="w")
         self.entry_fim_m = ctk.CTkEntry(frame_sessao, width=50, placeholder_text="MM", font=self.default_font)
         self.entry_fim_m.grid(row=3, column=2, padx=5, pady=5, sticky="w")
+        
+        # --- Novo campo de Pausa ---
+        ctk.CTkLabel(frame_sessao, text="Pausa (min):", font=self.default_font).grid(row=3, column=3, padx=(10,5), pady=5, sticky="e")
+        self.entry_pausa_min = ctk.CTkEntry(frame_sessao, width=60, font=self.default_font)
+        self.entry_pausa_min.grid(row=3, column=4, pady=5, sticky="w")
+
 
         # --- Itens Produzidos ---
         ctk.CTkLabel(frame_sessao, text="Itens Produzidos:", font=self.default_font).grid(row=4, column=0, padx=(10,5), pady=5, sticky="e")
@@ -108,7 +114,7 @@ class AtelieApp(ctk.CTk):
         ctk.CTkLabel(frame_tabela_registros, text="Últimos Registros", font=self.title_font).grid(row=0, column=0, pady=5, padx=10)
         
         # --- Tabela ---
-        cabecalho_registros = ['ID', 'Data', 'Início', 'Fim', 'Itens Produzidos']
+        cabecalho_registros = ['ID', 'Data', 'Início', 'Fim', 'Pausa (min)', 'Duração Total (min)', 'Itens Produzidos']
         self.tabela_registros = ttk.Treeview(frame_tabela_registros, columns=cabecalho_registros, show='headings')
         for col in cabecalho_registros:
             self.tabela_registros.heading(col, text=col)
@@ -175,10 +181,16 @@ class AtelieApp(ctk.CTk):
             try:
                 file_header = next(reader)
                 if file_header != header:
-                    # Se o cabeçalho não bate, sobrescreve o arquivo
-                    return self._get_csv_data(file_path, header)
+                    # O cabeçalho do arquivo não corresponde ao esperado.
+                    # Para evitar corrupção, o arquivo será reescrito com o cabeçalho correto.
+                    # AVISO: Os dados antigos neste arquivo serão perdidos.
+                    with open(file_path, mode='w', encoding='utf-8', newline='') as f_rewrite:
+                        writer = csv.writer(f_rewrite)
+                        writer.writerow(header)
+                    return [] # Retorna lista vazia pois o arquivo foi resetado.
                 return list(reader)
             except StopIteration:
+                # Arquivo existe mas está vazio (só tem cabeçalho ou nem isso)
                 return []
 
     def _carregar_produtos_csv(self):
@@ -186,7 +198,7 @@ class AtelieApp(ctk.CTk):
         return self._get_csv_data(self.produtos_csv_path, header)
 
     def _carregar_registros_csv(self):
-        header = ['id_registro', 'data', 'inicio', 'fim', 'itens_produzidos']
+        header = ['id_registro', 'data', 'inicio', 'fim', 'pausa_min', 'duracao_total_min', 'itens_produzidos']
         return self._get_csv_data(self.registros_csv_path, header)
 
     def _atualizar_dropdown_produtos(self):
@@ -285,13 +297,34 @@ class AtelieApp(ctk.CTk):
         self.entry_item_qtd.delete(0, "end")
 
     def _salvar_sessao(self):
-        data = f"{self.entry_ano.get()}-{self.entry_mes.get()}-{self.entry_dia.get()}"
-        inicio = f"{self.entry_inicio_h.get()}:{self.entry_inicio_m.get()}"
-        fim = f"{self.entry_fim_h.get()}:{self.entry_fim_m.get()}"
-        itens_produzidos = self.textbox_itens_sessao.get("1.0", "end-1c").strip()
+        data_str = f"{self.entry_ano.get()}-{self.entry_mes.get()}-{self.entry_dia.get()}"
+        inicio_str = f"{self.entry_inicio_h.get()}:{self.entry_inicio_m.get()}"
+        fim_str = f"{self.entry_fim_h.get()}:{self.entry_fim_m.get()}"
+        pausa_str = self.entry_pausa_min.get()
 
+        # Validação da pausa
+        if pausa_str.strip() == "":
+            pausa_em_minutos = 0
+        elif not pausa_str.isdigit():
+            messagebox.showerror("Erro de Validação", "O valor da pausa deve ser um número.")
+            return
+        else:
+            pausa_em_minutos = int(pausa_str)
+
+        # Validação dos itens produzidos
+        itens_produzidos = self.textbox_itens_sessao.get("1.0", "end-1c").strip()
         if not itens_produzidos:
-            messagebox.showerror("Erro", "Nenhum item produzido foi adicionado à sessão.")
+            itens_produzidos = "Nenhuma produção"
+
+        # Cálculo da duração
+        try:
+            horario_inicio = datetime.strptime(inicio_str, "%H:%M")
+            horario_fim = datetime.strptime(fim_str, "%H:%M")
+            duracao_bruta = horario_fim - horario_inicio
+            duracao_bruta_min = duracao_bruta.total_seconds() / 60
+            duracao_liquida_min = round(duracao_bruta_min - pausa_em_minutos)
+        except ValueError:
+            messagebox.showerror("Erro de Formato", "Os horários de início e fim devem estar no formato HH:MM.")
             return
 
         registros = self._carregar_registros_csv()
@@ -310,7 +343,7 @@ class AtelieApp(ctk.CTk):
                 novo_id_num = max_id + 1
         
         novo_id = f"reg_{novo_id_num:03d}"
-        novo_registro = [novo_id, data, inicio, fim, itens_produzidos.replace('\n', ' | ')]
+        novo_registro = [novo_id, data_str, inicio_str, fim_str, pausa_em_minutos, duracao_liquida_min, itens_produzidos.replace('\n', ' | ')]
 
         with open(self.registros_csv_path, mode='a', encoding='utf-8', newline='') as f:
             writer = csv.writer(f)
@@ -323,6 +356,7 @@ class AtelieApp(ctk.CTk):
         self.entry_inicio_m.delete(0, 'end')
         self.entry_fim_h.delete(0, 'end')
         self.entry_fim_m.delete(0, 'end')
+        self.entry_pausa_min.delete(0, 'end')
         self.textbox_itens_sessao.delete("1.0", "end")
         messagebox.showinfo("Sucesso", "Sessão de trabalho salva com sucesso!")
 
@@ -339,7 +373,7 @@ class AtelieApp(ctk.CTk):
         registros = self._carregar_registros_csv()
         registros_mantidos = [r for r in registros if r[0] != registro_id]
 
-        header = ['id_registro', 'data', 'inicio', 'fim', 'itens_produzidos']
+        header = ['id_registro', 'data', 'inicio', 'fim', 'pausa_min', 'duracao_total_min', 'itens_produzidos']
         with open(self.registros_csv_path, mode='w', encoding='utf-8', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(header)
