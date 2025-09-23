@@ -49,7 +49,6 @@ class AtelieAnalysisApp(ctk.CTk):
         # --- Atualização Inicial ---
         self._atualizar_visao()
 
-    # --- Parte 1: Melhorias Visuais e de Estrutura ---
     def _estilizar_grafico(self, ax, fig):
         """Aplica um estilo visual escuro e limpo ao gráfico Matplotlib."""
         fig.set_facecolor("#2B2B2B")
@@ -129,11 +128,14 @@ class AtelieAnalysisApp(ctk.CTk):
         pass
 
     def _carregar_e_preparar_dados(self):
+        """Lê e prepara o CSV, normalizando datas para robustez."""
         try:
             self.df_registros = pd.read_csv("registros.csv")
             if self.df_registros.empty:
                 return
-            self.df_registros['data'] = pd.to_datetime(self.df_registros['data'])
+            # Converte a coluna de data e normaliza para remover o componente de tempo
+            self.df_registros['data'] = pd.to_datetime(self.df_registros['data']).dt.normalize()
+            
             for col in ['pausa_min', 'duracao_total_min']:
                 self.df_registros[col] = pd.to_numeric(self.df_registros[col], errors='coerce').fillna(0)
         except FileNotFoundError:
@@ -177,7 +179,12 @@ class AtelieAnalysisApp(ctk.CTk):
         if self.visao_atual == "Semanal":
             inicio_semana = self.data_referencia - timedelta(days=self.data_referencia.weekday())
             fim_semana = inicio_semana + timedelta(days=6)
-            df_filtrado = self.df_registros[(self.df_registros['data'].dt.date >= inicio_semana) & (self.df_registros['data'].dt.date <= fim_semana)]
+
+            # Correção: Converter os objetos date para Timestamp do pandas para a comparação
+            inicio_semana_ts = pd.to_datetime(inicio_semana)
+            fim_semana_ts = pd.to_datetime(fim_semana)
+
+            df_filtrado = self.df_registros[(self.df_registros['data'] >= inicio_semana_ts) & (self.df_registros['data'] <= fim_semana_ts)]
             self._plotar_grafico_semanal(df_filtrado, inicio_semana, fim_semana)
             self.label_periodo.configure(text=f"{inicio_semana.strftime('%d/%m/%Y')} - {fim_semana.strftime('%d/%m/%Y')}")
 
@@ -206,23 +213,28 @@ class AtelieAnalysisApp(ctk.CTk):
             self.label_dias_trabalhados.configure(text="0 dias")
 
     def _plotar_grafico_semanal(self, df_semana, inicio_semana, fim_semana):
+        """Plota um gráfico de barras horizontais com o total de horas por dia da semana."""
         self.ax.clear()
         
         if df_semana.empty:
-            self.ax.text(0.5, 0.5, "Sem dados para esta semana", ha='center', va='center', color='white')
+            self.ax.text(0.5, 0.5, "Sem dados para o período", ha='center', va='center', color='white')
         else:
             df_semana['horas_trabalhadas'] = df_semana['duracao_total_min'] / 60
-            dados_por_dia = df_semana.groupby(df_semana['data'].dt.day_name())['horas_trabalhadas'].sum()
+            # Usa .dt.weekday para uma abordagem numérica e independente de idioma (0=Segunda, 6=Domingo)
+            df_semana['dia_da_semana_num'] = df_semana['data'].dt.weekday
+            dados_por_dia = df_semana.groupby('dia_da_semana_num')['horas_trabalhadas'].sum()
             
-            dias_semana_ordem = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo']
-            dados_por_dia = dados_por_dia.reindex(dias_semana_ordem, fill_value=0)
+            # Garante que todos os dias da semana existam para a plotagem
+            dados_por_dia = dados_por_dia.reindex(range(7), fill_value=0)
+            
+            dias_em_portugues = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
 
-            barras = self.ax.barh(dados_por_dia.index, dados_por_dia.values, color='#009688')
-            self.ax.bar_label(barras, fmt='%.1fh', padding=3, color='white', fontsize=10)
+            barras = self.ax.barh(dias_em_portugues, dados_por_dia.values, color='#009688')
+            self.ax.bar_label(barras, fmt='%.1f h', padding=3, color='white', fontsize=10)
             
-            self.ax.set_xlabel("Horas Trabalhadas", color='white')
+            self.ax.set_xlabel("Horas Trabalhadas")
             self.ax.set_title(f"Horas por Dia na Semana de {inicio_semana.strftime('%d/%m')} a {fim_semana.strftime('%d/%m')}")
-            self.ax.invert_yaxis()
+            self.ax.invert_yaxis() # Mostra Segunda-feira no topo
 
         self._estilizar_grafico(self.ax, self.fig)
         self.fig.tight_layout()
@@ -239,7 +251,7 @@ class AtelieAnalysisApp(ctk.CTk):
             if tipo == "Mensal":
                 dados_agregados = df_periodo.groupby(df_periodo['data'].dt.day)['horas_trabalhadas'].sum()
                 barras = self.ax.bar(dados_agregados.index, dados_agregados.values, color='#20726A')
-                self.ax.set_xlabel("Dia do Mês", color='white')
+                self.ax.set_xlabel("Dia do Mês")
                 self.ax.set_title(f"Horas Trabalhadas em: {self.data_referencia.strftime('%B de %Y').capitalize()}")
             else: # Anual
                 dados_agregados = df_periodo.groupby(df_periodo['data'].dt.month)['horas_trabalhadas'].sum()
@@ -247,11 +259,11 @@ class AtelieAnalysisApp(ctk.CTk):
                 barras = self.ax.bar(dados_agregados.index, dados_agregados.values, color='#20726A')
                 self.ax.set_xticks(range(1, 13))
                 self.ax.set_xticklabels([calendar.month_abbr[i].capitalize() for i in range(1, 13)], rotation=0)
-                self.ax.set_xlabel("Mês", color='white')
+                self.ax.set_xlabel("Mês")
                 self.ax.set_title(f"Horas Trabalhadas em: {self.data_referencia.year}")
 
             self.ax.bar_label(barras, fmt='%.1f', padding=3, color='white', fontsize=10)
-            self.ax.set_ylabel("Total de Horas Trabalhadas", color='white')
+            self.ax.set_ylabel("Total de Horas Trabalhadas")
 
         self._estilizar_grafico(self.ax, self.fig)
         self.fig.tight_layout()
