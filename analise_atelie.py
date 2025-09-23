@@ -1,11 +1,15 @@
+
 import customtkinter as ctk
 import pandas as pd
-from tkinter import messagebox
+import numpy as np
+from tkinter import messagebox, ttk
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from sklearn.linear_model import LinearRegression
 import calendar
 import locale
+import re
 
 # Define o local para português para formatar nomes de meses e dias
 try:
@@ -65,13 +69,9 @@ class AtelieAnalysisApp(ctk.CTk):
         ax.grid(True, which='major', linestyle='--', linewidth=0.5, alpha=0.3)
 
     def criar_aba_dashboard(self):
-        """
-        Cria os widgets e o layout para a aba "Dashboard de Horas".
-        """
         self.tab_dashboard.grid_columnconfigure(0, weight=1)
         self.tab_dashboard.grid_rowconfigure(2, weight=1)
 
-        # --- Painel de Destaques (KPIs) ---
         frame_kpis = ctk.CTkFrame(self.tab_dashboard)
         frame_kpis.grid(row=0, column=0, padx=20, pady=(10, 5), sticky="ew")
         frame_kpis.grid_columnconfigure([0, 1, 2], weight=1)
@@ -91,7 +91,6 @@ class AtelieAnalysisApp(ctk.CTk):
         self.label_dias_trabalhados = ctk.CTkLabel(frame_kpis, text="---", font=kpi_value_font)
         self.label_dias_trabalhados.grid(row=1, column=2, pady=(0,10))
 
-        # --- Frame de Controles ---
         frame_controles = ctk.CTkFrame(self.tab_dashboard)
         frame_controles.grid(row=1, column=0, padx=20, pady=5, sticky="ew")
         frame_controles.grid_columnconfigure(1, weight=1)
@@ -111,7 +110,6 @@ class AtelieAnalysisApp(ctk.CTk):
         self.segmented_button_visao.set("Semanal")
         self.segmented_button_visao.grid(row=0, column=3, padx=10, pady=10)
 
-        # --- Área do Gráfico ---
         self.frame_grafico = ctk.CTkFrame(self.tab_dashboard)
         self.frame_grafico.grid(row=2, column=0, padx=20, pady=(5, 10), sticky="nsew")
         self.frame_grafico.grid_columnconfigure(0, weight=1)
@@ -125,7 +123,27 @@ class AtelieAnalysisApp(ctk.CTk):
         self.canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
 
     def criar_aba_analise(self):
-        pass
+        """Cria a interface da aba de Análise de Produtos."""
+        self.tab_analise_produtos.grid_columnconfigure(0, weight=1)
+        self.tab_analise_produtos.grid_rowconfigure(1, weight=1)
+
+        frame_principal = ctk.CTkFrame(self.tab_analise_produtos)
+        frame_principal.grid(row=0, column=0, padx=20, pady=20, sticky="ew")
+
+        btn_analise = ctk.CTkButton(frame_principal, text="Calcular Análise de Produção", command=self._executar_analise_produtos)
+        btn_analise.pack(pady=10)
+
+        frame_tabela = ctk.CTkFrame(self.tab_analise_produtos)
+        frame_tabela.grid(row=1, column=0, padx=20, pady=(0, 20), sticky="nsew")
+        frame_tabela.grid_columnconfigure(0, weight=1)
+        frame_tabela.grid_rowconfigure(0, weight=1)
+
+        cabecalho = ["Produto", "Tempo Meta (min)", "Tempo Calculado (min)", "Diferença (%)", "Total Produzido"]
+        self.tabela_analise = ttk.Treeview(frame_tabela, columns=cabecalho, show='headings')
+        for col in cabecalho:
+            self.tabela_analise.heading(col, text=col)
+            self.tabela_analise.column(col, anchor="center")
+        self.tabela_analise.grid(row=0, column=0, sticky="nsew")
 
     def _carregar_e_preparar_dados(self):
         """Lê e prepara o CSV, normalizando datas para robustez."""
@@ -133,15 +151,80 @@ class AtelieAnalysisApp(ctk.CTk):
             self.df_registros = pd.read_csv("registros.csv")
             if self.df_registros.empty:
                 return
-            # Converte a coluna de data e normaliza para remover o componente de tempo
             self.df_registros['data'] = pd.to_datetime(self.df_registros['data']).dt.normalize()
-            
             for col in ['pausa_min', 'duracao_total_min']:
                 self.df_registros[col] = pd.to_numeric(self.df_registros[col], errors='coerce').fillna(0)
         except FileNotFoundError:
             messagebox.showerror("Erro Crítico", "O arquivo 'registros.csv' não foi encontrado.")
         except Exception as e:
             messagebox.showerror("Erro ao Carregar Dados", f"Ocorreu um erro inesperado:\n{e}")
+
+    def _executar_analise_produtos(self):
+        """Executa a análise de regressão linear para calcular o tempo de produção."""
+        try:
+            df_produtos = pd.read_csv("produtos.csv")
+            df_registros = pd.read_csv("registros.csv")
+        except FileNotFoundError as e:
+            messagebox.showerror("Arquivo Não Encontrado", f"Não foi possível encontrar o arquivo: {e.filename}")
+            return
+
+        df_registros_com_producao = df_registros[df_registros['itens_produzidos'] != 'Nenhuma produção'].copy()
+
+        if len(df_registros_com_producao) < 3:
+            messagebox.showerror("Dados Insuficientes", "São necessários pelo menos 3 registros com produção para realizar a análise.")
+            return
+
+        # --- Preparação de Dados ---
+        product_ids = df_produtos['id_produto'].unique()
+        for pid in product_ids:
+            df_registros_com_producao[pid] = 0
+
+        name_to_id = {f"{row['nome']} ({row['tamanho']})": row['id_produto'] for _, row in df_produtos.iterrows()}
+
+        for index, row in df_registros_com_producao.iterrows():
+            itens = row['itens_produzidos'].split(' | ')
+            for item in itens:
+                match = re.search(r'"(.+?)\s\(Qtd:\s*(\d+)\)"\n?', item)
+                if match:
+                    nome_produto, quantidade = match.groups()
+                    pid = name_to_id.get(nome_produto)
+                    if pid:
+                        df_registros_com_producao.loc[index, pid] += int(quantidade)
+
+        # --- Modelagem com scikit-learn ---
+        X = df_registros_com_producao[product_ids]
+        y = df_registros_com_producao['duracao_total_min']
+
+        model = LinearRegression()
+        model.fit(X, y)
+
+        # --- Exibição dos Resultados ---
+        for item in self.tabela_analise.get_children():
+            self.tabela_analise.delete(item)
+
+        coef_dict = dict(zip(product_ids, model.coef_))
+
+        for _, row in df_produtos.iterrows():
+            pid = row['id_produto']
+            nome_completo = f"{row['nome']} ({row['tamanho']})"
+            tempo_meta = pd.to_numeric(row['tempo_estimado_min'], errors='coerce')
+            tempo_calculado = coef_dict.get(pid, 0)
+            total_produzido = X[pid].sum()
+
+            if pd.isna(tempo_meta) or tempo_meta == 0:
+                diferenca_pct = 0
+            else:
+                diferenca_pct = ((tempo_calculado - tempo_meta) / tempo_meta) * 100
+
+            self.tabela_analise.insert("", "end", values=[
+                nome_completo,
+                f"{tempo_meta:.1f}" if not pd.isna(tempo_meta) else "N/A",
+                f"{tempo_calculado:.1f}",
+                f"{diferenca_pct:+.1f}%",
+                int(total_produzido)
+            ])
+        
+        messagebox.showinfo("Sucesso", "Análise de produção concluída com sucesso!")
 
     def _navegar_anterior(self):
         if self.visao_atual == "Semanal":
@@ -179,11 +262,8 @@ class AtelieAnalysisApp(ctk.CTk):
         if self.visao_atual == "Semanal":
             inicio_semana = self.data_referencia - timedelta(days=self.data_referencia.weekday())
             fim_semana = inicio_semana + timedelta(days=6)
-
-            # Correção: Converter os objetos date para Timestamp do pandas para a comparação
             inicio_semana_ts = pd.to_datetime(inicio_semana)
             fim_semana_ts = pd.to_datetime(fim_semana)
-
             df_filtrado = self.df_registros[(self.df_registros['data'] >= inicio_semana_ts) & (self.df_registros['data'] <= fim_semana_ts)]
             self._plotar_grafico_semanal(df_filtrado, inicio_semana, fim_semana)
             self.label_periodo.configure(text=f"{inicio_semana.strftime('%d/%m/%Y')} - {fim_semana.strftime('%d/%m/%Y')}")
@@ -199,7 +279,6 @@ class AtelieAnalysisApp(ctk.CTk):
             self._plotar_grafico_mensal_anual(df_filtrado, "Anual")
             self.label_periodo.configure(text=f"Ano de {self.data_referencia.year}")
 
-        # Atualizar KPIs
         if not df_filtrado.empty:
             total_horas = df_filtrado['duracao_total_min'].sum() / 60
             dias_trabalhados = df_filtrado['data'].nunique()
@@ -213,41 +292,30 @@ class AtelieAnalysisApp(ctk.CTk):
             self.label_dias_trabalhados.configure(text="0 dias")
 
     def _plotar_grafico_semanal(self, df_semana, inicio_semana, fim_semana):
-        """Plota um gráfico de barras horizontais com o total de horas por dia da semana."""
         self.ax.clear()
-        
         if df_semana.empty:
             self.ax.text(0.5, 0.5, "Sem dados para o período", ha='center', va='center', color='white')
         else:
             df_semana['horas_trabalhadas'] = df_semana['duracao_total_min'] / 60
-            # Usa .dt.weekday para uma abordagem numérica e independente de idioma (0=Segunda, 6=Domingo)
             df_semana['dia_da_semana_num'] = df_semana['data'].dt.weekday
             dados_por_dia = df_semana.groupby('dia_da_semana_num')['horas_trabalhadas'].sum()
-            
-            # Garante que todos os dias da semana existam para a plotagem
             dados_por_dia = dados_por_dia.reindex(range(7), fill_value=0)
-            
             dias_em_portugues = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
-
             barras = self.ax.barh(dias_em_portugues, dados_por_dia.values, color='#009688')
             self.ax.bar_label(barras, fmt='%.1f h', padding=3, color='white', fontsize=10)
-            
             self.ax.set_xlabel("Horas Trabalhadas")
             self.ax.set_title(f"Horas por Dia na Semana de {inicio_semana.strftime('%d/%m')} a {fim_semana.strftime('%d/%m')}")
-            self.ax.invert_yaxis() # Mostra Segunda-feira no topo
-
+            self.ax.invert_yaxis()
         self._estilizar_grafico(self.ax, self.fig)
         self.fig.tight_layout()
         self.canvas.draw()
 
     def _plotar_grafico_mensal_anual(self, df_periodo, tipo):
         self.ax.clear()
-        
         if df_periodo.empty:
             self.ax.text(0.5, 0.5, f"Sem dados para este {tipo.lower()}", ha='center', va='center', color='white')
         else:
             df_periodo['horas_trabalhadas'] = df_periodo['duracao_total_min'] / 60
-            
             if tipo == "Mensal":
                 dados_agregados = df_periodo.groupby(df_periodo['data'].dt.day)['horas_trabalhadas'].sum()
                 barras = self.ax.bar(dados_agregados.index, dados_agregados.values, color='#20726A')
@@ -261,15 +329,12 @@ class AtelieAnalysisApp(ctk.CTk):
                 self.ax.set_xticklabels([calendar.month_abbr[i].capitalize() for i in range(1, 13)], rotation=0)
                 self.ax.set_xlabel("Mês")
                 self.ax.set_title(f"Horas Trabalhadas em: {self.data_referencia.year}")
-
             self.ax.bar_label(barras, fmt='%.1f', padding=3, color='white', fontsize=10)
             self.ax.set_ylabel("Total de Horas Trabalhadas")
-
         self._estilizar_grafico(self.ax, self.fig)
         self.fig.tight_layout()
         self.canvas.draw()
 
-# --- Ponto de Entrada do Programa ---
 if __name__ == "__main__":
     app = AtelieAnalysisApp()
     app.mainloop()
