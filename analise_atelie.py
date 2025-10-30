@@ -1,4 +1,3 @@
-
 import customtkinter as ctk
 import pandas as pd
 import numpy as np
@@ -10,6 +9,7 @@ from sklearn.linear_model import LinearRegression
 import calendar
 import locale
 import re
+import os
 
 # Define o local para português para formatar nomes de meses e dias
 try:
@@ -32,6 +32,11 @@ class AtelieAnalysisApp(ctk.CTk):
         self.title("Análise de Dados do Ateliê")
         self.attributes('-zoomed', True)
         self.minsize(800, 600)
+
+        # --- CORREÇÃO: Caminhos de arquivo robustos ---
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.registros_csv_path = os.path.join(script_dir, "registros.csv")
+        self.produtos_csv_path = os.path.join(script_dir, "produtos.csv")
 
         # --- Atributos de Estado ---
         self.visao_atual = "Semanal"
@@ -146,35 +151,45 @@ class AtelieAnalysisApp(ctk.CTk):
         self.tabela_analise.grid(row=0, column=0, sticky="nsew")
 
     def _carregar_e_preparar_dados(self):
-        """Lê e prepara o CSV, normalizando datas para robustez."""
+        """Lê e prepara os CSVs, garantindo os tipos de dados corretos e tratando erros."""
         try:
-            self.df_registros = pd.read_csv("registros.csv")
+            self.df_registros = pd.read_csv(self.registros_csv_path)
             if self.df_registros.empty:
                 return
-            self.df_registros['data'] = pd.to_datetime(self.df_registros['data']).dt.normalize()
+
+            self.df_registros['data'] = pd.to_datetime(self.df_registros['data'], errors='coerce')
+            self.df_registros.dropna(subset=['data'], inplace=True)
+            self.df_registros['data'] = self.df_registros['data'].dt.normalize()
+
             for col in ['pausa_min', 'duracao_total_min']:
                 self.df_registros[col] = pd.to_numeric(self.df_registros[col], errors='coerce').fillna(0)
+
         except FileNotFoundError:
-            messagebox.showerror("Erro Crítico", "O arquivo 'registros.csv' não foi encontrado.")
+            messagebox.showwarning("Aviso", f"Arquivo {os.path.basename(self.registros_csv_path)} não encontrado.")
+            self.df_registros = pd.DataFrame(columns=['id_registro', 'data', 'inicio', 'fim', 'pausa_min', 'duracao_total_min', 'itens_produzidos'])
         except Exception as e:
-            messagebox.showerror("Erro ao Carregar Dados", f"Ocorreu um erro inesperado:\n{e}")
+            messagebox.showerror("Erro ao Carregar Dados", f"Ocorreu um erro inesperado ao ler {os.path.basename(self.registros_csv_path)}:\n{e}")
 
     def _executar_analise_produtos(self):
         """Executa a análise de regressão linear para calcular o tempo de produção."""
         try:
-            df_produtos = pd.read_csv("produtos.csv")
-            df_registros = pd.read_csv("registros.csv")
-        except FileNotFoundError as e:
-            messagebox.showerror("Arquivo Não Encontrado", f"Não foi possível encontrar o arquivo: {e.filename}")
+            df_produtos = pd.read_csv(self.produtos_csv_path)
+            if self.df_registros.empty:
+                 messagebox.showerror("Dados Insuficientes", "Não há registros de trabalho para analisar.")
+                 return
+        except FileNotFoundError:
+            messagebox.showerror("Arquivo Não Encontrado", f"Não foi possível encontrar o arquivo: {os.path.basename(self.produtos_csv_path)}")
+            return
+        except Exception as e:
+            messagebox.showerror("Erro Inesperado", f"Ocorreu um erro ao carregar os dados: {e}")
             return
 
-        df_registros_com_producao = df_registros[df_registros['itens_produzidos'] != 'Nenhuma produção'].copy()
+        df_registros_com_producao = self.df_registros[self.df_registros['itens_produzidos'] != 'Nenhuma produção'].copy()
 
-        if len(df_registros_com_producao) < 3:
-            messagebox.showerror("Dados Insuficientes", "São necessários pelo menos 3 registros com produção para realizar a análise.")
+        if len(df_registros_com_producao) < len(df_produtos) + 1: 
+            messagebox.showerror("Dados Insuficientes", f"São necessários mais registros com produção (pelo menos {len(df_produtos)+1}) para realizar uma análise confiável.")
             return
 
-        # --- Preparação de Dados ---
         product_ids = df_produtos['id_produto'].unique()
         for pid in product_ids:
             df_registros_com_producao[pid] = 0
@@ -184,21 +199,27 @@ class AtelieAnalysisApp(ctk.CTk):
         for index, row in df_registros_com_producao.iterrows():
             itens = row['itens_produzidos'].split(' | ')
             for item in itens:
-                match = re.search(r'"(.+?)\s\(Qtd:\s*(\d+)\)"\n?', item)
+                match = re.search(r'"(.*?)\s\(Qtd:\s*(\d+)\)"', item)
                 if match:
                     nome_produto, quantidade = match.groups()
                     pid = name_to_id.get(nome_produto)
                     if pid:
                         df_registros_com_producao.loc[index, pid] += int(quantidade)
 
-        # --- Modelagem com scikit-learn ---
         X = df_registros_com_producao[product_ids]
         y = df_registros_com_producao['duracao_total_min']
+
+        if X.sum().sum() == 0:
+            messagebox.showerror("Análise Inconclusiva", "Não foi possível extrair dados de produção dos registros. Verifique o formato no arquivo CSV.")
+            return
 
         model = LinearRegression()
         model.fit(X, y)
 
-        # --- Exibição dos Resultados ---
+        if np.all(model.coef_ == 0) or np.isnan(model.coef_).any():
+            messagebox.showerror("Análise Inconclusiva", "Não foi possível calcular os tempos. Verifique se há variedade suficiente nos dados de produção registrados.")
+            return
+
         for item in self.tabela_analise.get_children():
             self.tabela_analise.delete(item)
 
@@ -225,7 +246,7 @@ class AtelieAnalysisApp(ctk.CTk):
             ])
         
         messagebox.showinfo("Sucesso", "Análise de produção concluída com sucesso!")
-
+        
     def _navegar_anterior(self):
         if self.visao_atual == "Semanal":
             self.data_referencia -= timedelta(days=7)
@@ -287,16 +308,17 @@ class AtelieAnalysisApp(ctk.CTk):
             self.label_media_diaria.configure(text=f"{media_diaria:.1f}h")
             self.label_dias_trabalhados.configure(text=f"{dias_trabalhados} dias")
         else:
-            self.label_total_horas.configure(text="0h")
-            self.label_media_diaria.configure(text="0h")
+            self.label_total_horas.configure(text="0.0h")
+            self.label_media_diaria.configure(text="0.0h")
             self.label_dias_trabalhados.configure(text="0 dias")
 
     def _plotar_grafico_semanal(self, df_semana, inicio_semana, fim_semana):
+        print(df_semana) # Para debugging
         self.ax.clear()
         if df_semana.empty:
             self.ax.text(0.5, 0.5, "Sem dados para o período", ha='center', va='center', color='white')
         else:
-            df_semana['horas_trabalhadas'] = df_semana['duracao_total_min'] / 60
+            df_semana['horas_trabalhadas'] = pd.to_numeric(df_semana['duracao_total_min'], errors='coerce').fillna(0) / 60
             df_semana['dia_da_semana_num'] = df_semana['data'].dt.weekday
             dados_por_dia = df_semana.groupby('dia_da_semana_num')['horas_trabalhadas'].sum()
             dados_por_dia = dados_por_dia.reindex(range(7), fill_value=0)
@@ -329,7 +351,7 @@ class AtelieAnalysisApp(ctk.CTk):
                 self.ax.set_xticklabels([calendar.month_abbr[i].capitalize() for i in range(1, 13)], rotation=0)
                 self.ax.set_xlabel("Mês")
                 self.ax.set_title(f"Horas Trabalhadas em: {self.data_referencia.year}")
-            self.ax.bar_label(barras, fmt='%.1f', padding=3, color='white', fontsize=10)
+            self.ax.bar_label(barras, fmt='%.1fh', padding=3, color='white', fontsize=10)
             self.ax.set_ylabel("Total de Horas Trabalhadas")
         self._estilizar_grafico(self.ax, self.fig)
         self.fig.tight_layout()

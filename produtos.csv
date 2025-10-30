@@ -3,6 +3,9 @@ prod_001,Ecobag Simples,Único,60
 prod_002,Necessaire Box,Pequeno,90
 prod_003,Necessaire Box,Médio,120
 prod_004,Bolsa de Praia,Único,200
-prod_005,Necessaire,P,60
-prod_006,Bolsa de academia,GG,240
-prod_007,Teste,Grande,40
+prod_005,Estojo Escolar,Único,75
+prod_006,Porta-moedas,Pequeno,45
+prod_007,Bolsa Tote,Grande,180
+prod_008,Mochila de Tecido,Único,240
+prod_009,Lancheira Térmica,Médio,150
+prod_010,Capa de Almofada,Médio,60

@@ -1,7 +1,16 @@
 id_registro,data,inicio,fim,pausa_min,duracao_total_min,itens_produzidos
-reg_001,2025-09-23,10:00,18:00,120,360,Nenhuma produção
-reg_002,2025-09-22,10:00,17:00,10,410,Nenhuma produção
-reg_003,2025-09-21,08:00,20:00,220,500,"""Necessaire (P) (Qtd: 5) | ""Necessaire Box (Pequeno) (Qtd: 1)"
-reg_004,2025-09-20,13:00,17:00,0,240,Nenhuma produção
-reg_005,2025-09-19,10:00,15:00,60,240,"""Ecobag Simples (Único) (Qtd: 9)"
-reg_006,2025-09-18,10:30,17:30,30,390,"""Necessaire Box (Médio) (Qtd: 8) | ""Necessaire (P) (Qtd: 1)"
+reg_001,2025-01-01,10:33,17:02,30,359,"""Porta-moedas (Pequeno) (Qtd: 1)"""
+reg_002,2025-01-02,09:26,15:46,90,290,"""Mochila de Tecido (Único) (Qtd: 4)"""
+reg_003,2025-01-03,10:14,16:27,0,373,"""Porta-moedas (Pequeno) (Qtd: 3)"""
+reg_004,2025-01-06,10:37,17:19,0,402,"""Necessaire Box (Médio) (Qtd: 4)"""
+reg_005,2025-01-07,08:58,14:58,0,360,"""Bolsa de Praia (Único) (Qtd: 5)"""
+reg_006,2025-01-08,08:22,13:24,0,302,"""Estojo Escolar (Único) (Qtd: 1)"""
+reg_007,2025-01-09,09:14,15:41,90,297,"""Estojo Escolar (Único) (Qtd: 1)"""
+reg_008,2025-01-10,10:13,18:24,60,431,"""Mochila de Tecido (Único) (Qtd: 4)"""
+reg_009,2025-01-13,09:38,17:05,30,417,Nenhuma produção
+reg_010,2025-01-14,09:17,18:13,90,446,"""Bolsa Tote (Grande) (Qtd: 3)"""
+reg_011,2025-01-15,09:45,15:34,0,349,"""Necessaire Box (Médio) (Qtd: 1)"""
+reg_012,2025-01-16,08:14,14:03,0,349,"""Lancheira Térmica (Médio) (Qtd: 2)"""
+reg_013,2025-01-17,09:24,17:07,30,433,"""Capa de Almofada (Médio) (Qtd: 1)"""
+reg_014,2025-01-20,10:55,16:11,30,286,"""Bolsa de Praia (Único) (Qtd: 3)"""
+reg_015,2025-01-21,09:55,17:45,60,410,Nenhuma produção
