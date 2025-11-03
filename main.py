@@ -21,8 +21,9 @@ class AtelieApp(ctk.CTk):
         self.minsize(600, 500) # Define um tamanho mínimo para a janela
 
         # --- Caminhos para os arquivos de dados ---
-        self.produtos_csv_path = "produtos.csv"
-        self.registros_csv_path = "registros.csv"
+        self.produtos_csv_path = "produtos.csv" # Mantido
+        self.sessoes_csv_path = "sessoes.csv" # Renomeado de registros.csv
+        self.producao_csv_path = "producao.csv" # Novo arquivo para itens produzidos
 
         # --- Fontes Padronizadas ---
         self.default_font = ctk.CTkFont(size=15, weight="bold")
@@ -181,13 +182,11 @@ class AtelieApp(ctk.CTk):
             try:
                 file_header = next(reader)
                 if file_header != header:
-                    # O cabeçalho do arquivo não corresponde ao esperado.
-                    # Para evitar corrupção, o arquivo será reescrito com o cabeçalho correto.
-                    # AVISO: Os dados antigos neste arquivo serão perdidos.
-                    with open(file_path, mode='w', encoding='utf-8', newline='') as f_rewrite:
-                        writer = csv.writer(f_rewrite)
-                        writer.writerow(header)
-                    return [] # Retorna lista vazia pois o arquivo foi resetado.
+                    messagebox.showwarning(
+                        "Erro de Leitura de Arquivo",
+                        f"O cabeçalho do arquivo '{os.path.basename(file_path)}' está corrompido. O arquivo não será carregado para evitar perda de dados. Por favor, verifique o arquivo."
+                    )
+                    return []
                 return list(reader)
             except StopIteration:
                 # Arquivo existe mas está vazio (só tem cabeçalho ou nem isso)
@@ -198,12 +197,23 @@ class AtelieApp(ctk.CTk):
         return self._get_csv_data(self.produtos_csv_path, header)
 
     def _carregar_registros_csv(self):
-        header = ['id_registro', 'data', 'inicio', 'fim', 'pausa_min', 'duracao_total_min', 'itens_produzidos']
-        return self._get_csv_data(self.registros_csv_path, header)
+        # O cabeçalho agora é apenas para as sessões
+        header = ['id_registro', 'data', 'inicio', 'fim', 'pausa_min', 'duracao_total_min']
+        return self._get_csv_data(self.sessoes_csv_path, header)
+
+    def _carregar_producao_csv(self):
+        header = ['id_producao', 'id_registro', 'id_produto', 'quantidade']
+        return self._get_csv_data(self.producao_csv_path, header)
 
     def _atualizar_dropdown_produtos(self):
         produtos = self._carregar_produtos_csv()
-        nomes_produtos = [f"{p[1]} ({p[2]})" for p in produtos if len(p) > 2] if produtos else ["Nenhum produto cadastrado"]
+        # Corrigido para garantir que o produto tenha todos os campos necessários
+        nomes_produtos = []
+        if produtos:
+            for p in produtos:
+                if len(p) > 2 and p[1] and p[2]: # Garante que nome e tamanho não são vazios
+                    nomes_produtos.append(f"{p[1]} ({p[2]})")
+        nomes_produtos = nomes_produtos if nomes_produtos else ["Nenhum produto cadastrado"]
         self.option_menu_produtos.configure(values=nomes_produtos)
         self.option_menu_produtos.set(nomes_produtos[0] if nomes_produtos else "")
 
@@ -218,9 +228,25 @@ class AtelieApp(ctk.CTk):
     def _popular_tabela_registros(self):
         for item in self.tabela_registros.get_children():
             self.tabela_registros.delete(item)
-        registros = self._carregar_registros_csv()
-        for registro in registros:
-            self.tabela_registros.insert('', 'end', values=registro)
+
+        sessoes = self._carregar_registros_csv()
+        producao = self._carregar_producao_csv()
+        produtos = self._carregar_produtos_csv()
+
+        # Mapeia id_produto para nome formatado para eficiência
+        mapa_produtos = {p[0]: f"{p[1]} ({p[2]})" for p in produtos}
+
+        # Agrupa os itens produzidos por id_registro
+        producao_por_sessao = {}
+        for item in producao:
+            id_reg, id_prod, qtd = item[1], item[2], item[3]
+            nome_produto = mapa_produtos.get(id_prod, "Produto Desconhecido")
+            item_str = f'"{nome_produto} (Qtd: {qtd})"'
+            producao_por_sessao.setdefault(id_reg, []).append(item_str)
+
+        for sessao in sessoes:
+            itens_str = " | ".join(producao_por_sessao.get(sessao[0], ["Nenhuma produção"]))
+            self.tabela_registros.insert('', 'end', values=sessao + [itens_str])
 
     def _salvar_novo_produto(self):
         nome = self.entry_nome.get()
@@ -311,11 +337,6 @@ class AtelieApp(ctk.CTk):
         else:
             pausa_em_minutos = int(pausa_str)
 
-        # Validação dos itens produzidos
-        itens_produzidos = self.textbox_itens_sessao.get("1.0", "end-1c").strip()
-        if not itens_produzidos:
-            itens_produzidos = "Nenhuma produção"
-
         # Cálculo da duração
         try:
             horario_inicio = datetime.strptime(inicio_str, "%H:%M")
@@ -327,28 +348,64 @@ class AtelieApp(ctk.CTk):
             messagebox.showerror("Erro de Formato", "Os horários de início e fim devem estar no formato HH:MM.")
             return
 
-        registros = self._carregar_registros_csv()
+        # --- Lógica de ID para a nova sessão ---
+        sessoes = self._carregar_registros_csv()
         novo_id_num = 1
-        if registros:
+        if sessoes:
             try:
-                ultimo_id = registros[-1][0]
+                ultimo_id = sessoes[-1][0]
                 novo_id_num = int(ultimo_id.split('_')[-1]) + 1
             except (ValueError, IndexError):
                 max_id = 0
-                for r in registros:
+                for r in sessoes:
                     try:
                         id_num = int(r[0].split('_')[-1])
                         if id_num > max_id: max_id = id_num
                     except (ValueError, IndexError): continue
                 novo_id_num = max_id + 1
         
-        novo_id = f"reg_{novo_id_num:03d}"
-        novo_registro = [novo_id, data_str, inicio_str, fim_str, pausa_em_minutos, duracao_liquida_min, itens_produzidos.replace('\n', ' | ')]
+        id_registro_atual = f"reg_{novo_id_num:03d}"
 
-        with open(self.registros_csv_path, mode='a', encoding='utf-8', newline='') as f:
+        # --- Salvar a sessão no sessoes.csv ---
+        nova_sessao = [id_registro_atual, data_str, inicio_str, fim_str, pausa_em_minutos, duracao_liquida_min]
+        with open(self.sessoes_csv_path, mode='a', encoding='utf-8', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow(novo_registro)
+            writer.writerow(nova_sessao)
 
+        # --- Salvar os itens produzidos no producao.csv ---
+        itens_produzidos_str = self.textbox_itens_sessao.get("1.0", "end-1c").strip()
+        if itens_produzidos_str:
+            produtos = self._carregar_produtos_csv()
+            mapa_produtos = {f"{p[1]} ({p[2]})": p[0] for p in produtos}
+            
+            producao_total = self._carregar_producao_csv()
+            id_producao_num = 1
+            if producao_total:
+                try:
+                    ultimo_id_prod = producao_total[-1][0]
+                    id_producao_num = int(ultimo_id_prod.split('_')[-1]) + 1
+                except (ValueError, IndexError):
+                    max_id = 0
+                    for item in producao_total:
+                        try:
+                            id_num = int(item[0].split('_')[-1])
+                            if id_num > max_id: max_id = id_num
+                        except (ValueError, IndexError): continue
+                    id_producao_num = max_id + 1
+
+            with open(self.producao_csv_path, mode='a', encoding='utf-8', newline='') as f:
+                writer = csv.writer(f)
+                itens_lista = itens_produzidos_str.split('\n')
+                for item in itens_lista:
+                    partes = item.strip().replace('"', '').split(' (Qtd: ')
+                    nome_formatado = partes[0]
+                    quantidade = partes[1][:-1] # Remove o ')'
+                    id_produto = mapa_produtos.get(nome_formatado)
+                    if id_produto:
+                        id_producao_atual = f"item_{id_producao_num:03d}"
+                        writer.writerow([id_producao_atual, id_registro_atual, id_produto, quantidade])
+                        id_producao_num += 1
+        
         self._popular_tabela_registros()
         
         # Limpar campos
@@ -369,15 +426,25 @@ class AtelieApp(ctk.CTk):
         if not messagebox.askyesno("Confirmar", "Tem certeza que deseja excluir o registro?"):
             return
 
+        # --- Excluir do sessoes.csv ---
         registro_id = self.tabela_registros.item(selected_item)['values'][0]
-        registros = self._carregar_registros_csv()
-        registros_mantidos = [r for r in registros if r[0] != registro_id]
+        sessoes = self._carregar_registros_csv()
+        sessoes_mantidas = [r for r in sessoes if r[0] != registro_id]
 
-        header = ['id_registro', 'data', 'inicio', 'fim', 'pausa_min', 'duracao_total_min', 'itens_produzidos']
-        with open(self.registros_csv_path, mode='w', encoding='utf-8', newline='') as f:
+        header_sessoes = ['id_registro', 'data', 'inicio', 'fim', 'pausa_min', 'duracao_total_min']
+        with open(self.sessoes_csv_path, mode='w', encoding='utf-8', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow(header)
-            writer.writerows(registros_mantidos)
+            writer.writerow(header_sessoes)
+            writer.writerows(sessoes_mantidas)
+
+        # --- Excluir do producao.csv ---
+        producao = self._carregar_producao_csv()
+        producao_mantida = [p for p in producao if p[1] != registro_id]
+        header_producao = ['id_producao', 'id_registro', 'id_produto', 'quantidade']
+        with open(self.producao_csv_path, mode='w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(header_producao)
+            writer.writerows(producao_mantida)
 
         self._popular_tabela_registros()
         messagebox.showinfo("Sucesso", "Registro excluído com sucesso!")
